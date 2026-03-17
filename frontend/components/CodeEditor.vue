@@ -18,131 +18,95 @@
 </template>
 
 <script setup>
-import { EditorView, keymap } from '@codemirror/view'
-import { EditorState } from '@codemirror/state'
-import { html } from '@codemirror/lang-html'
-import { oneDark } from '@codemirror/theme-one-dark'
-import { indentWithTab } from '@codemirror/commands'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
     type: String,
     default: ''
   },
-  activeFile: {
+  language: {
     type: String,
-    required: true
-  },
-  role: {
-    type: String,
-    required: true
+    default: 'html'
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'change'])
+const emit = defineEmits(['update:modelValue'])
 
 const editorRef = ref(null)
-let editorView = null
-let isUpdating = false
+let cmEditor = null
+let isUpdatingFromExternal = false
+let lastCursorPosition = null
 
-// Configuración del editor según el rol
-const createEditorState = (content) => {
-  const extensions = [
-    html(),
-    oneDark,
-    keymap.of([indentWithTab]),
-    EditorView.theme({
-      '&': {
-        fontSize: '14px',
-        height: '100%'
-      },
-      '.cm-content': {
-        fontFamily: '"Fira Code", "Monaco", "Consolas", monospace'
-      },
-      '.cm-gutters': {
-        backgroundColor: '#16213e',
-        borderRight: '1px solid #0f3460'
-      }
-    }),
-    EditorView.updateListener.of((update) => {
-      if (update.docChanged && !isUpdating) {
-        const newContent = update.state.doc.toString()
-        emit('update:modelValue', newContent)
-        emit('change', newContent)
-      }
-    })
-  ]
-
-  // Si es estudiante, hacerlo de solo lectura
-  if (props.role !== 'teacher') {
-    extensions.push(EditorState.readOnly.of(true))
-  }
-
-  return EditorState.create({
-    doc: content,
-    extensions
+onMounted(async () => {
+  const { default: CodeMirror } = await import('codemirror')
+  await import('codemirror/lib/codemirror.css')
+  await import('codemirror/theme/dracula.css')
+  
+  // Import language modes
+  if (props.language === 'html') await import('codemirror/mode/xml/xml')
+  if (props.language === 'css') await import('codemirror/mode/css/css')
+  if (props.language === 'javascript') await import('codemirror/mode/javascript/javascript')
+  
+  cmEditor = CodeMirror(editorRef.value, {
+    value: props.modelValue,
+    mode: getMode(props.language),
+    theme: 'dracula',
+    lineNumbers: true,
+    lineWrapping: true,
+    tabSize: 2,
+    indentWithTabs: false,
+    autofocus: true
   })
-}
-
-// Inicializar editor
-const initEditor = () => {
-  if (!editorRef.value) return
-
-  const state = createEditorState(props.modelValue)
   
-  editorView = new EditorView({
-    state,
-    parent: editorRef.value
-  })
-}
-
-// Actualizar contenido desde fuera
-const updateContent = (newContent) => {
-  if (!editorView) return
-  
-  const currentContent = editorView.state.doc.toString()
-  if (newContent === currentContent) return
-
-  isUpdating = true
-  
-  const transaction = editorView.state.update({
-    changes: {
-      from: 0,
-      to: currentContent.length,
-      insert: newContent
+  cmEditor.on('change', (instance, changeObj) => {
+    // Solo emitir si el cambio viene del usuario (no de actualización externa)
+    if (!isUpdatingFromExternal && changeObj.origin !== 'setValue') {
+      const value = instance.getValue()
+      emit('update:modelValue', value)
     }
   })
   
-  editorView.dispatch(transaction)
-  
-  // Resetear flag después de un pequeño delay
-  setTimeout(() => {
-    isUpdating = false
-  }, 10)
+  // Watch para cambios externos (desde socket)
+  watch(() => props.modelValue, (newValue) => {
+    if (cmEditor && cmEditor.getValue() !== newValue) {
+      // Guardar posición del cursor antes de actualizar
+      lastCursorPosition = cmEditor.getCursor()
+      
+      // Marcar que estamos actualizando desde fuera
+      isUpdatingFromExternal = true
+      
+      // Actualizar el valor
+      cmEditor.setValue(newValue)
+      
+      // Restaurar posición del cursor
+      if (lastCursorPosition) {
+        cmEditor.setCursor(lastCursorPosition)
+      }
+      
+      // Desmarcar bandera después de un pequeño delay
+      setTimeout(() => {
+        isUpdatingFromExternal = false
+      }, 0)
+    }
+  }, { flush: 'sync' })
+})
+
+onBeforeUnmount(() => {
+  if (cmEditor) {
+    cmEditor.toTextArea()
+    cmEditor = null
+  }
+})
+
+function getMode(language) {
+  switch (language) {
+    case 'html': return 'xml'
+    case 'css': return 'css'
+    case 'javascript': return 'javascript'
+    default: return 'xml'
+  }
 }
-
-// Watch para cambios en el contenido desde props
-watch(() => props.modelValue, (newValue) => {
-  if (newValue !== undefined) {
-    updateContent(newValue)
-  }
-}, { immediate: false })
-
-// Watch para cambios de archivo
-watch(() => props.activeFile, () => {
-  // El contenido se actualizará vía el v-model del padre
-})
-
-onMounted(() => {
-  initEditor()
-})
-
-onUnmounted(() => {
-  if (editorView) {
-    editorView.destroy()
-    editorView = null
-  }
-})
 </script>
 
 <style scoped>

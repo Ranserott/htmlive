@@ -45,19 +45,19 @@ const roomId = ref(route.params.roomId)
 const role = ref(route.query.role || 'student')
 const loading = ref(true)
 
-// Estado de la aplicación
-const files = ref({})
-const activeFile = ref('index.html')
-const currentContent = ref('')
-
-// Socket
+// Socket y estado compartido
 const { 
   connected, 
   connect, 
   disconnect, 
   on, 
-  emit 
+  emit,
+  files
 } = useSocket()
+
+// Estado local de la aplicación
+const activeFile = ref('index.html')
+const currentContent = ref('')
 
 // Debounce para enviar cambios (300ms)
 const debouncedEmit = useDebounce((event, data) => {
