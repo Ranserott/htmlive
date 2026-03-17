@@ -192,7 +192,7 @@ onMounted(async () => {
     return
   }
 
-  // Configurar listeners antes de conectar
+  // Configurar listeners ANTES de conectar
   setupSocketListeners()
 
   try {
