@@ -189,4 +189,3 @@ watch(() => props.content, (newContent, oldContent) => {
   border: none;
 }
 </style>
-</content>
