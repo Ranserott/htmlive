@@ -13,8 +13,8 @@ WORKDIR /app/backend
 # Copy package files
 COPY backend/package*.json ./
 
-# Install production dependencies
-RUN npm ci --only=production && \
+# Install production dependencies (using npm install instead of npm ci)
+RUN npm install --production && \
     npm cache clean --force
 
 # -----------------------------------------------------------------------------
@@ -28,7 +28,7 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 
 # Install all dependencies (including dev for build)
-RUN npm ci && \
+RUN npm install && \
     npm cache clean --force
 
 # -----------------------------------------------------------------------------
@@ -90,24 +90,54 @@ COPY --from=frontend-build --chown=appuser:appgroup /app/frontend/.output ./.out
 # -----------------------------------------------------------------------------
 WORKDIR /app
 
-# Create startup script
+# Create startup script with proper signal handling
 RUN cat > /app/start.sh << 'EOF'
 #!/bin/sh
 set -e
 
 echo "🚀 Starting Live Code Classroom..."
+echo ""
 
-# Function to check if a port is available
-check_port() {
-    local port=$1
-    local name=$2
-    if ! nc -z localhost $port 2>/dev/null; then
-        echo "  ✓ Port $port ($name) is available"
-        return 0
-    else
-        echo "  ✗ Port $port ($name) is already in use"
-        return 1
+# Function to cleanup processes
+cleanup() {
+    echo ""
+    echo "🛑 Shutting down..."
+    if [ -n "$BACKEND_PID" ]; then
+        kill $BACKEND_PID 2>/dev/null || true
+        wait $BACKEND_PID 2>/dev/null || true
     fi
+    if [ -n "$FRONTEND_PID" ]; then
+        kill $FRONTEND_PID 2>/dev/null || true
+        wait $FRONTEND_PID 2>/dev/null || true
+    fi
+    echo "✅ All processes stopped"
+    exit 0
+}
+
+# Set trap for signals
+trap cleanup TERM INT
+
+# Function to check if a service is healthy
+check_health() {
+    local url=$1
+    local name=$2
+    local max_attempts=30
+    local attempt=1
+    
+    echo "🏥 Checking $name health..."
+    
+    while [ $attempt -le $max_attempts ]; do
+        if curl -s -f "$url" > /dev/null 2>&1; then
+            echo "  ✓ $name is healthy"
+            return 0
+        fi
+        echo "  ⏳ Attempt $attempt/$max_attempts..."
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+    
+    echo "  ✗ $name failed health check"
+    return 1
 }
 
 # Check required commands
@@ -116,58 +146,55 @@ if ! command -v node >/dev/null 2>&1; then
     echo "  ✗ Node.js is not installed"
     exit 1
 fi
-echo "  ✓ Node.js is available"
+echo "  ✓ Node.js $(node -v) is available"
 
 # Start Backend
+echo ""
 echo "🔧 Starting Backend on port 3001..."
 cd /app/backend
 node server.js &
 BACKEND_PID=$!
 echo "  ✓ Backend started with PID: $BACKEND_PID"
 
-# Wait a moment for backend to start
-sleep 2
-
-# Check if backend is running
-if ! kill -0 $BACKEND_PID 2>/dev/null; then
-    echo "  ✗ Backend failed to start"
+# Check backend health
+if ! check_health "http://localhost:3001/health" "Backend"; then
+    echo "  ✗ Backend failed to start properly"
+    cleanup
     exit 1
 fi
 
 # Start Frontend
+echo ""
 echo "🎨 Starting Frontend on port 3000..."
 cd /app/frontend
 node .output/server/index.mjs &
 FRONTEND_PID=$!
 echo "  ✓ Frontend started with PID: $FRONTEND_PID"
 
-# Wait a moment for frontend to start
-sleep 2
-
-# Check if frontend is running
-if ! kill -0 $FRONTEND_PID 2>/dev/null; then
-    echo "  ✗ Frontend failed to start"
-    # Kill backend if frontend failed
-    kill $BACKEND_PID 2>/dev/null
+# Check frontend health
+if ! check_health "http://localhost:3000/api/health" "Frontend"; then
+    echo "  ✗ Frontend failed to start properly"
+    cleanup
     exit 1
 fi
 
 echo ""
-echo "✅ Live Code Classroom is running!"
-echo "   Backend:  http://localhost:3001"
-echo "   Frontend: http://localhost:3000"
-echo ""
-echo "Press Ctrl+C to stop"
+echo "╔════════════════════════════════════════════════════════╗"
+echo "║  ✅ Live Code Classroom is running!                  ║"
+echo "║                                                       ║"
+echo "║  🌐 Frontend: http://localhost:3000                   ║"
+echo "║  🔌 Backend:  http://localhost:3001                 ║"
+echo "║                                                       ║"
+echo "║  Press Ctrl+C to stop                                ║"
+echo "╚════════════════════════════════════════════════════════╝"
 echo ""
 
-# Wait for any process to exit
+# Wait for all background processes
 wait -n
-
-# Exit with the status of the first process that exited
 EXIT_CODE=$?
 
-# Kill all remaining processes
-kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
+# Cleanup
+cleanup
 
 exit $EXIT_CODE
 EOF
@@ -175,7 +202,7 @@ EOF
 # Make script executable
 RUN chmod +x /app/start.sh
 
-# Change ownership
+# Change ownership of all files
 RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
@@ -192,7 +219,7 @@ EXPOSE 3001
 # -----------------------------------------------------------------------------
 # Health Checks
 # -----------------------------------------------------------------------------
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD sh -c 'curl -f http://localhost:3001/health && curl -f http://localhost:3000/api/health' || exit 1
 
 # -----------------------------------------------------------------------------
