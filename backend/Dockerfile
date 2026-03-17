@@ -1,33 +1,55 @@
+# =============================================================================
 # Backend Dockerfile - Live Code Classroom
+# Node.js + Socket.IO Server
+# =============================================================================
 
-FROM node:18-alpine
+# -----------------------------------------------------------------------------
+# Stage 1: Dependencies
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS dependencies
 
-# Crear directorio de trabajo
 WORKDIR /app
 
-# Copiar package.json y package-lock.json
+# Copy package files
 COPY package*.json ./
 
-# Instalar dependencias
-RUN npm ci --only=production
+# Install production dependencies only
+RUN npm ci --only=production && \
+    npm cache clean --force
 
-# Copiar código fuente
-COPY . .
+# -----------------------------------------------------------------------------
+# Stage 2: Production
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS production
 
-# Crear usuario no-root para seguridad
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Create app directory
+WORKDIR /app
+
+# Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Cambiar permisos
-RUN chown -R nodejs:nodejs /app
+# Copy dependencies from stage 1
+COPY --from=dependencies --chown=nodejs:nodejs /app/node_modules ./node_modules
+
+# Copy application files
+COPY --chown=nodejs:nodejs . .
+
+# Switch to non-root user
 USER nodejs
 
-# Exponer puerto
+# Expose port
 EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+    CMD node -e "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
 
-# Comando de inicio
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the server
 CMD ["node", "server.js"]
