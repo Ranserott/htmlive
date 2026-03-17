@@ -1,16 +1,30 @@
 <template>
-  <div class="preview-section">
+  <div class="preview-section" :class="{ collapsed: !isExpanded }">
     <div class="preview-header">
       <span class="preview-title">
         <span>👁️</span>
-        <span>Vista Previa</span>
+        <span v-if="isExpanded">Vista Previa</span>
       </span>
-      <button class="preview-refresh" @click="refreshPreview" title="Refrescar">
-        🔄
-      </button>
+      <div class="preview-actions">
+        <button 
+          v-if="isExpanded"
+          class="preview-refresh" 
+          @click="refreshPreview" 
+          title="Refrescar"
+        >
+          🔄
+        </button>
+        <button 
+          class="preview-toggle" 
+          @click="togglePreview" 
+          :title="isExpanded ? 'Ocultar' : 'Mostrar'"
+        >
+          {{ isExpanded ? '→' : '👁️' }}
+        </button>
+      </div>
     </div>
     
-    <div class="preview-container">
+    <div v-if="isExpanded" class="preview-container">
       <iframe
         ref="iframeRef"
         class="preview-frame"
@@ -32,6 +46,7 @@ const props = defineProps({
 
 const iframeRef = ref(null)
 const iframeLoaded = ref(false)
+const isExpanded = ref(true)
 
 // Generar srcdoc con el contenido
 const srcdoc = computed(() => {
@@ -72,6 +87,10 @@ const refreshPreview = () => {
   }
 }
 
+const togglePreview = () => {
+  isExpanded.value = !isExpanded.value
+}
+
 const onIframeLoad = () => {
   iframeLoaded.value = true
 }
@@ -84,3 +103,90 @@ watch(() => props.content, (newContent, oldContent) => {
   }
 })
 </script>
+
+<style scoped>
+.preview-section {
+  width: 45%;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #0f3460;
+  transition: all 0.3s ease;
+}
+
+.preview-section.collapsed {
+  width: 50px;
+  min-width: 50px;
+  border-left: 1px solid #0f3460;
+}
+
+.preview-header {
+  height: 40px;
+  background: #16213e;
+  border-bottom: 1px solid #0f3460;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+.preview-title {
+  font-size: 0.85rem;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.preview-refresh {
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.preview-refresh:hover {
+  background: #0f3460;
+  color: #fff;
+}
+
+.preview-toggle {
+  background: #0f3460;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  font-weight: bold;
+}
+
+.preview-toggle:hover {
+  background: #e94560;
+  color: white;
+}
+
+.preview-container {
+  flex: 1;
+  background: white;
+  overflow: hidden;
+}
+
+.preview-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+</style>
+</content>

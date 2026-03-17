@@ -1,7 +1,7 @@
 <template>
   <nav class="navbar">
     <div class="navbar-left">
-      <span class="navbar-title">🎓 Live Code Classroom</span>
+      <span class="navbar-title">🎓 livecodeprofe</span>
       <span class="navbar-room">Room: {{ roomId }}</span>
     </div>
     <div class="navbar-right">

@@ -1,7 +1,7 @@
 <template>
   <div class="room-selector">
     <div class="room-card">
-      <h1>🎓 Live Code Classroom</h1>
+      <h1>🎓 livecodeprofe</h1>
       <p class="subtitle">Pizarra de código en vivo para clases de programación</p>
       
       <div class="form-group">
