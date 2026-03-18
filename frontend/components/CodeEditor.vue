@@ -19,13 +19,6 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
-import CodeMirror from 'codemirror'
-import 'codemirror/lib/codemirror.css'
-import 'codemirror/theme/dracula.css'
-import 'codemirror/mode/xml/xml'
-import 'codemirror/mode/css/css'
-import 'codemirror/mode/javascript/javascript'
-import 'codemirror/mode/htmlmixed/htmlmixed'
 
 const props = defineProps({
   modelValue: {
@@ -45,7 +38,24 @@ let cmEditor = null
 let isUpdatingFromExternal = false
 let lastCursorPosition = null
 
-onMounted(() => {
+onMounted(async () => {
+  // Dynamic import of CodeMirror to avoid SSR issues
+  const CodeMirror = await import('codemirror/lib/codemirror.js').then(m => m.default || m)
+  
+  // Import styles
+  await import('codemirror/lib/codemirror.css')
+  await import('codemirror/theme/dracula.css')
+  
+  // Import language modes based on language prop
+  if (props.language === 'html') {
+    await import('codemirror/mode/xml/xml.js')
+    await import('codemirror/mode/htmlmixed/htmlmixed.js')
+  } else if (props.language === 'css') {
+    await import('codemirror/mode/css/css.js')
+  } else if (props.language === 'javascript') {
+    await import('codemirror/mode/javascript/javascript.js')
+  }
+  
   cmEditor = CodeMirror(editorRef.value, {
     value: props.modelValue,
     mode: getMode(props.language),
