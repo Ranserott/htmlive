@@ -39,49 +39,67 @@ let isUpdatingFromExternal = false
 let lastCursorPosition = null
 
 onMounted(async () => {
-  // Dynamic import of CodeMirror to avoid SSR issues
-  const CodeMirror = await import('codemirror/lib/codemirror.js').then(m => m.default || m)
+  // Dynamic imports for CodeMirror 6
+  const { EditorView, basicSetup } = await import('@codemirror/basic-setup')
+  const { html } = await import('@codemirror/lang-html')
+  const { css } = await import('@codemirror/lang-css')
+  const { javascript } = await import('@codemirror/lang-javascript')
+  const { oneDark } = await import('@codemirror/theme-one-dark')
   
-  // Import styles
-  await import('codemirror/lib/codemirror.css')
-  await import('codemirror/theme/dracula.css')
-  
-  // Import language modes based on language prop
-  if (props.language === 'html') {
-    await import('codemirror/mode/xml/xml.js')
-    await import('codemirror/mode/htmlmixed/htmlmixed.js')
-  } else if (props.language === 'css') {
-    await import('codemirror/mode/css/css.js')
-  } else if (props.language === 'javascript') {
-    await import('codemirror/mode/javascript/javascript.js')
+  // Determine language extension
+  let langExtension
+  switch (props.language) {
+    case 'css':
+      langExtension = css()
+      break
+    case 'javascript':
+      langExtension = javascript()
+      break
+    case 'html':
+    default:
+      langExtension = html()
   }
   
-  cmEditor = CodeMirror(editorRef.value, {
-    value: props.modelValue,
-    mode: getMode(props.language),
-    theme: 'dracula',
-    lineNumbers: true,
-    lineWrapping: true,
-    tabSize: 2,
-    indentWithTabs: false,
-    autofocus: true
-  })
-  
-  cmEditor.on('change', (instance, changeObj) => {
-    if (!isUpdatingFromExternal && changeObj.origin !== 'setValue') {
-      const value = instance.getValue()
-      emit('update:modelValue', value)
-    }
+  cmEditor = new EditorView({
+    doc: props.modelValue,
+    extensions: [
+      basicSetup,
+      langExtension,
+      oneDark,
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged && !isUpdatingFromExternal) {
+          const value = update.state.doc.toString()
+          emit('update:modelValue', value)
+        }
+      }),
+      EditorView.theme({
+        '&': {
+          height: '100%',
+          fontSize: '14px'
+        },
+        '.cm-content': {
+          fontFamily: '"Fira Code", "Monaco", "Consolas", monospace'
+        },
+        '.cm-gutters': {
+          backgroundColor: '#16213e',
+          borderRight: '1px solid #0f3460'
+        }
+      })
+    ],
+    parent: editorRef.value
   })
   
   watch(() => props.modelValue, (newValue) => {
-    if (cmEditor && cmEditor.getValue() !== newValue) {
-      lastCursorPosition = cmEditor.getCursor()
+    if (cmEditor && cmEditor.state.doc.toString() !== newValue) {
       isUpdatingFromExternal = true
-      cmEditor.setValue(newValue)
-      if (lastCursorPosition) {
-        cmEditor.setCursor(lastCursorPosition)
-      }
+      const transaction = cmEditor.state.update({
+        changes: {
+          from: 0,
+          to: cmEditor.state.doc.length,
+          insert: newValue
+        }
+      })
+      cmEditor.dispatch(transaction)
       setTimeout(() => {
         isUpdatingFromExternal = false
       }, 0)
@@ -91,19 +109,10 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (cmEditor) {
-    cmEditor.toTextArea()
+    cmEditor.destroy()
     cmEditor = null
   }
 })
-
-function getMode(language) {
-  switch (language) {
-    case 'html': return 'htmlmixed'
-    case 'css': return 'css'
-    case 'javascript': return 'javascript'
-    default: return 'htmlmixed'
-  }
-}
 </script>
 
 <style scoped>

@@ -14,7 +14,10 @@
     "nuxt": "^3.8.0"
   },
   "dependencies": {
+    "@codemirror/basic-setup": "^6.2.1",
+    "@codemirror/lang-css": "^6.2.1",
     "@codemirror/lang-html": "^6.4.6",
+    "@codemirror/lang-javascript": "^6.2.1",
     "@codemirror/theme-one-dark": "^6.1.2",
     "codemirror": "^6.0.1",
     "socket.io-client": "^4.7.2",
