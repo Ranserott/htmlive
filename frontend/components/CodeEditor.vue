@@ -19,6 +19,13 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import CodeMirror from 'codemirror'
+import 'codemirror/lib/codemirror.css'
+import 'codemirror/theme/dracula.css'
+import 'codemirror/mode/xml/xml'
+import 'codemirror/mode/css/css'
+import 'codemirror/mode/javascript/javascript'
+import 'codemirror/mode/htmlmixed/htmlmixed'
 
 const props = defineProps({
   modelValue: {
@@ -38,16 +45,7 @@ let cmEditor = null
 let isUpdatingFromExternal = false
 let lastCursorPosition = null
 
-onMounted(async () => {
-  const { default: CodeMirror } = await import('codemirror')
-  await import('codemirror/lib/codemirror.css')
-  await import('codemirror/theme/dracula.css')
-  
-  // Import language modes
-  if (props.language === 'html') await import('codemirror/mode/xml/xml')
-  if (props.language === 'css') await import('codemirror/mode/css/css')
-  if (props.language === 'javascript') await import('codemirror/mode/javascript/javascript')
-  
+onMounted(() => {
   cmEditor = CodeMirror(editorRef.value, {
     value: props.modelValue,
     mode: getMode(props.language),
@@ -60,31 +58,20 @@ onMounted(async () => {
   })
   
   cmEditor.on('change', (instance, changeObj) => {
-    // Solo emitir si el cambio viene del usuario (no de actualización externa)
     if (!isUpdatingFromExternal && changeObj.origin !== 'setValue') {
       const value = instance.getValue()
       emit('update:modelValue', value)
     }
   })
   
-  // Watch para cambios externos (desde socket)
   watch(() => props.modelValue, (newValue) => {
     if (cmEditor && cmEditor.getValue() !== newValue) {
-      // Guardar posición del cursor antes de actualizar
       lastCursorPosition = cmEditor.getCursor()
-      
-      // Marcar que estamos actualizando desde fuera
       isUpdatingFromExternal = true
-      
-      // Actualizar el valor
       cmEditor.setValue(newValue)
-      
-      // Restaurar posición del cursor
       if (lastCursorPosition) {
         cmEditor.setCursor(lastCursorPosition)
       }
-      
-      // Desmarcar bandera después de un pequeño delay
       setTimeout(() => {
         isUpdatingFromExternal = false
       }, 0)
@@ -101,15 +88,65 @@ onBeforeUnmount(() => {
 
 function getMode(language) {
   switch (language) {
-    case 'html': return 'xml'
+    case 'html': return 'htmlmixed'
     case 'css': return 'css'
     case 'javascript': return 'javascript'
-    default: return 'xml'
+    default: return 'htmlmixed'
   }
 }
 </script>
 
 <style scoped>
+.editor-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1a1a2e;
+}
+
+.editor-tabs {
+  display: flex;
+  background: #16213e;
+  border-bottom: 1px solid #0f3460;
+  padding: 0 10px;
+}
+
+.editor-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 15px;
+  background: #1a1a2e;
+  border: 1px solid #0f3460;
+  border-bottom: none;
+  color: #eaeaea;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.editor-tab .icon {
+  font-size: 14px;
+}
+
+.editor-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.editor-readonly {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(255, 193, 7, 0.9);
+  color: #000;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  z-index: 100;
+}
+
 .codemirror-wrapper {
   height: 100%;
   width: 100%;
